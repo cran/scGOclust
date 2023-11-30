@@ -34,9 +34,9 @@ query co-up and co-down regulated GO terms from certain cell type pairs
 library(scGOclust)
 library(httr)
 httr::set_config(httr::config(ssl_verifypeer = FALSE))
-mmu_tbl = ensemblToGo(species = 'mmusculus')
+data(mmu_tbl)
 data(mmu_subset)
-dme_tbl = ensemblToGo(species = 'dmelanogaster')
+data(dme_tbl)
 data(dme_subset)
 
 mmu_go_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
@@ -56,7 +56,7 @@ analyzed_go_seurat_sp1 = mmu_go_obj_analyzed,
 analyzed_go_seurat_sp2 = dme_go_obj_analyzed,
 cell_type_col_sp1 = 'cell_type_annotation',
 cell_type_col_sp2 = 'annotation',
-slot_use = "data",
+layer_use = "data",
 p_val_threshould = 0.01)
 
 

@@ -1,4 +1,4 @@
-## ---- include = FALSE---------------------------------------------------------
+## ----include = FALSE----------------------------------------------------------
 knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
@@ -14,8 +14,8 @@ library(httr)
 ## if (!require("devtools")) install.packages("devtools")
 
 ## install latest from source
-## for reprodubcibility we do not update dependencies
-# devtools::install_github("YY-SONG0718/scGOclust", upgrade_dependencies = FALSE)
+## for reproducibility we do not update dependencies
+# devtools::install_github("Papatheodorou-Group/scGOclust", upgrade = FALSE)
 
 library(scGOclust)
 
@@ -61,7 +61,7 @@ dme_ct_go <- getCellTypeGO(go_seurat_obj = dme_go_obj, cell_type_col = 'annotati
 mmu_corr = cellTypeGOCorr(cell_type_go = mmu_ct_go, corr_method = 'pearson')
 pheatmap(mmu_corr)
 
-## ---- fig.height = 6, fig.width = 6-------------------------------------------
+## ----fig.height = 6, fig.width = 6--------------------------------------------
 dme_corr = cellTypeGOCorr(cell_type_go = dme_ct_go, corr_method = 'pearson')
 pheatmap(dme_corr)
 
@@ -74,50 +74,43 @@ corr = crossSpeciesCellTypeGOCorr(species_1 = 'mmusculus', species_2 = 'dmelanog
 
 ## ----heatmap_corr_cross, fig.width = 7,  fig.height = 8-----------------------
 
-# cross-species cell type profile heatmap
-
-pheatmap(corr, width = 9, height = 10)
-
-pheatmap(corr, scale = 'column', width = 9, height = 10)
-
-
-
-## ----sheatmap_corr_cross,  fig.width = 7,  fig.height = 8---------------------
-
-# sheatmap tries to put cells with higher values on the diagonal
+# tries to put cells with higher values on the diagonal
 # helpful when cross-species cell type similarity signal is less clear
 
-slanter::sheatmap((corr + 0.5), width = 9, height = 10)
+plotCellTypeCorrHeatmap(corr, width = 9, height = 10)
 
-# scale by row or column to see relative similarity
+# scale per column or row to see the relative similarity
+plotCellTypeCorrHeatmap(corr, scale = 'column', width = 9, height = 10)
 
-slanter::sheatmap((corr + 0.5), scale = 'column', width = 9, height = 10)
 
 
 ## ----analyze_GO---------------------------------------------------------------
 
 # analyze the cell-by-GO BP profile as a count matrix
-mmu_go_analyzed = analyzeGOSeurat(go_seurat_obj = mmu_go_obj, cell_type_col = 'cell_type_annotation')
+# Note that the example data has very few cells (for reducing data size), so I am using a small UMAP min_dist and small spread here. Default min_dist is 0.3 and spread is 1.
 
-## ---- fig.width = 6, fig.height = 6-------------------------------------------
+mmu_go_analyzed = analyzeGOSeurat(go_seurat_obj = mmu_go_obj, cell_type_col = 'cell_type_annotation', min.dist = 0.1, spread = 0.5)
+
+## ----fig.width = 6, fig.height = 6--------------------------------------------
 # UMAP plot of the analyzed cell-by-GO BP profile
 # labeled by previously specified cell annotation column in meta.data
 
 DimPlot(mmu_go_analyzed, label = TRUE) + NoLegend()
 
 ## -----------------------------------------------------------------------------
-dme_go_analyzed = analyzeGOSeurat(go_seurat_obj = dme_go_obj, cell_type_col = 'annotation')
+dme_go_analyzed = analyzeGOSeurat(go_seurat_obj = dme_go_obj, cell_type_col = 'annotation', min_dist=0.1, spread=0.5)
 
-## ---- fig.width = 6, fig.height = 6-------------------------------------------
+## ----fig.width = 6, fig.height = 6--------------------------------------------
 DimPlot(dme_go_analyzed, label = TRUE) + NoLegend()
 
 ## ----shared_go, eval = FALSE--------------------------------------------------
 #  
-#  ## calculation takes a few minutes due to the Wilcoxon signed rank test
+#  ## calculation takes a few minutes due to the Wilcox signed rank test
 #  
-#  ct_shared_go = getCellTypeSharedGO(species_1 = 'mmusculus', species_2 = 'dmelanogaster', analyzed_go_seurat_sp1 = mmu_go_analyzed, analyzed_go_seurat_sp2 = dme_go_analyzed, cell_type_col_sp1 = 'cell_type_annotation', cell_type_col_sp2 = 'annotation')
-#  
-#  head(ct_shared_go)
+#  ct_shared_go = scGOclust::getCellTypeSharedGO(species_1 = 'mmusculus', species_2 = 'dmelanogaster', analyzed_go_seurat_sp1 = mmu_go_analyzed, analyzed_go_seurat_sp2 = dme_go_analyzed, cell_type_col_sp1 = 'cell_type_annotation', cell_type_col_sp2 = 'annotation', layer_use = 'data')
+
+## ----view_shared_go, eval = FALSE---------------------------------------------
+#  head(ct_shared_go$shared_sig_markers)
 
 ## ----shared go cell type, eval = FALSE----------------------------------------
 #  
@@ -129,11 +122,10 @@ DimPlot(dme_go_analyzed, label = TRUE) + NoLegend()
 #                         return_full = FALSE)
 #  
 #  
-#  
-#  
 
 ## ----sessioninfo--------------------------------------------------------------
 
+# viola
 sessionInfo()
 
 

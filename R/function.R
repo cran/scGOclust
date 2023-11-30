@@ -6,23 +6,23 @@
 #' @name ensemblToGo
 #' @param species species name matching ensembl biomaRt naming, such as hsapiens, mmusculus
 #' @param GO_type GO term type, choose among 'biological_process', 'molecular_function', 'cellular_component', default 'biological_process'
-#' @param GO_linkage_type GO annotation evidence codes set. Choose among 'experimental', 'phylogenetic', 'computational', 'author', 'curator', 'electronic', #' defaut remove 'electronic'
-#' @param ... additional args for useEnsembl
+#' @param GO_linkage_type GO annotation evidence codes to include. Default is 'standard', which means only including manually checked records (excluding IEA) and excluding those inferred from gene expression experiments to maximally suffice the species expression independence assumption. 'Stringent' means only including those with experimental evidence, also not from gene expression experiment, or from manual curation with evidence (excluding those from mass-annotation pipelines). Choose among 'experimental', 'phylogenetic', 'computational', 'author', 'curator', 'electronic', 'standard', stringent'
+#' @param ... additional params for useEnsembl function called in this function
 #' @return a table with ensembl to GO terms mapping including requested linkage type
 #' @examples
 #' \donttest{
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' ensemblToGo("mmusculus", GO_type = "biological_process", GO_linkage_type = "experimental")
+#' ensemblToGo("mmusculus", GO_type = "biological_process", GO_linkage_type = 'stringent')
 #' }
 #' @importFrom biomaRt useMart useEnsembl
 #' @importFrom magrittr %>%
-#' @importFrom dplyr filter
+#' @importFrom dplyr filter mutate case_when
 #' @export
 #'
 #'
-ensemblToGo <- function(species, GO_type = "biological_process", GO_linkage_type = c("experimental", "phylogenetic", "computational", "author", "curator"), ...) {
+ensemblToGo <- function(species, GO_type = "biological_process", GO_linkage_type = c("standard"), ...) {
 
   ## GO source type code
   go_source <- list(
@@ -31,7 +31,9 @@ ensemblToGo <- function(species, GO_type = "biological_process", GO_linkage_type
     computational = c("ISS", "ISO", "ISA", "ISM", "IGC", "RCA"),
     author = c("TAS", "NAS"),
     curator = c("IC", "ND"),
-    electronic = c("IEA")
+    electronic = c("IEA"),
+    standard = c("EXP", "IDA", "IPI", "IMP", "IGI", "IEP", "HTP", "HDA", "HMP", "HGI", "IBA", "IBD", "IKR", "IRD", "ISS", "ISO", "ISA", "ISM", "IGC", "RCA", "TAS", "IC"),
+    stringent = c("EXP", "IDA", "IPI", "IMP", "IGI",  "HTP", "HDA", "HMP", "HGI", "IKR", "RCA", "TAS", "IC")
   )
 
   # Get ensembl gene ids and GO terms
@@ -84,13 +86,28 @@ ensemblToGo <- function(species, GO_type = "biological_process", GO_linkage_type
     types_in_source[[source_type]] <- type_in
   }
 
-  included_terms <- sapply(GO_linkage_type, function(x) go_source[[x]])
+  included_terms <- sapply(GO_linkage_type, function(x) paste(go_source[[x]], sep = ', ', collapse = ', '))
   message("including GO link types: ")
-  message(included_terms)
+  for (name in names(included_terms)){
+    message(paste0(name, ": "))
+    message(included_terms[name])
+  }
 
   use <- as.character(unname(unlist(sapply(GO_linkage_type, function(x) go_source[[x]]))))
 
   GO_terms <- GO_terms %>% dplyr::filter(go_linkage_type %in% use)
+
+  ## add source type to GO terms
+  GO_terms <- GO_terms %>%
+    mutate(evidence_type = case_when(
+      go_linkage_type %in% go_source$experimental ~ "experimental",
+      go_linkage_type %in% go_source$phylogenetic ~ "phylogenetic",
+      go_linkage_type %in% go_source$computational ~ "computational",
+      go_linkage_type %in% go_source$author ~ "author",
+      go_linkage_type %in% go_source$curator ~ "curator",
+      go_linkage_type %in% go_source$electronic ~ "electronic",
+      TRUE ~ "unknown"
+    ))
 
   return(GO_terms)
 }
@@ -109,7 +126,7 @@ ensemblToGo <- function(species, GO_type = "biological_process", GO_linkage_type
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
 #' makeGOSeurat(ensembl_to_GO = mmu_tbl,
 #'  seurat_obj = mmu_subset,
@@ -164,6 +181,11 @@ makeGOSeurat <- function(ensembl_to_GO, seurat_obj, feature_type = "ensembl_gene
 
   message(paste0("time used: ", round(end_time - start_time, 2), " secs"))
 
+  all_zero_terms = names(rowSums(as.matrix(go_obj@assays$RNA@layers$counts))[which(rowSums(as.matrix(go_obj@assays$RNA@layers$counts)) == 0)])
+  message(paste0("removing ", length(all_zero_terms)), " all zero terms")
+
+  go_obj <- go_obj[which(!(rownames(go_obj) %in% all_zero_terms)), ]
+
   message("returning GO Seurat object")
   return(go_obj)
 }
@@ -184,7 +206,7 @@ makeGOSeurat <- function(ensembl_to_GO, seurat_obj, feature_type = "ensembl_gene
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
 #' go_seurat_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
 #'  seurat_obj = mmu_subset,
@@ -227,7 +249,7 @@ analyzeGOSeurat <- function(go_seurat_obj, cell_type_col, norm_log1p=TRUE, scale
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
 #' go_seurat_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
 #'  seurat_obj = mmu_subset,
@@ -251,7 +273,7 @@ getCellTypeGO <- function(go_seurat_obj, cell_type_col, norm_log1p = TRUE) {
 
   go_seurat_obj <- ScaleData(object = go_seurat_obj, features = rownames(go_seurat_obj), verbose = TRUE, scale.max = 10000) ## set scale.max to near-unlimited, also use all features
 
-  tbl <- AverageExpression(object = go_seurat_obj, group.by = cell_type_col, slot = "scale.data")
+  tbl <- AverageExpression(object = go_seurat_obj, group.by = cell_type_col, layer = "scale.data")
   return(as.data.frame(tbl[["RNA"]]))
 }
 
@@ -266,7 +288,7 @@ getCellTypeGO <- function(go_seurat_obj, cell_type_col, norm_log1p = TRUE) {
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
 #' go_seurat_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
 #'  seurat_obj = mmu_subset,
@@ -311,9 +333,9 @@ cellTypeGOCorr <- function(cell_type_go, corr_method = "pearson") {
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
-#' dme_tbl = ensemblToGo(species = 'dmelanogaster')
+#' data(dme_tbl)
 #' data(dme_subset)
 #' mmu_go_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
 #'  seurat_obj = mmu_subset,
@@ -341,7 +363,7 @@ crossSpeciesCellTypeGOCorr <- function(species_1, species_2, cell_type_go_sp1, c
   all_cell_types_sp1 <- colnames(cell_type_go_sp1)
   all_cell_types_sp2 <- colnames(cell_type_go_sp2)
 
-  ## take intersection of GO terms
+  ## take intersection of GO terms and match order
   intersection <- intersect(rownames(cell_type_go_sp1), rownames(cell_type_go_sp2))
   cell_type_go_sp1 <- cell_type_go_sp1[intersection, ]
   cell_type_go_sp2 <- cell_type_go_sp2[intersection, ]
@@ -365,94 +387,6 @@ crossSpeciesCellTypeGOCorr <- function(species_1, species_2, cell_type_go_sp1, c
 
 
 
-#' calculate cross-species correlation between cell types represented by scaled GO, re-scale based on shared GOs between species
-#' recommended when species share less common GOs
-#' @name crossSpeciesCellTypeGOCorrRescale
-#' @param species_1 name of species one
-#' @param species_2 name of species two
-#' @param go_seurat_obj_sp1 seurat object with GO profiles from species 1
-#' @param cell_type_col_sp1 column with cell type annotation from species 1
-#' @param norm_log1p_sp1 whether or not perform normalization and log1p for counts data in species 1, default TRUE
-#' @param go_seurat_obj_sp2 seurat object with GO profiles from species 2
-#' @param cell_type_col_sp2 column with cell type annotation from species 2
-#' @param norm_log1p_sp2 whether or not perform normalization and log1p for counts data in species 2, default TRUE
-#' @param corr_method correlation method, choose among "pearson", "kendall", "spearman", default 'pearson'
-#' @return correlation between cell types, scaling using only shared GOs
-#' @examples
-#' \donttest{
-#' library(scGOclust)
-#' library(httr)
-#' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
-#' data(mmu_subset)
-#' dme_tbl = ensemblToGo(species = 'dmelanogaster')
-#' data(dme_subset)
-#' mmu_go_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
-#'  seurat_obj = mmu_subset,
-#'  feature_type = "external_gene_name")
-#' dme_go_obj = makeGOSeurat(ensembl_to_GO = dme_tbl,
-#'  seurat_obj = dme_subset,
-#'  feature_type = "external_gene_name")
-#' crossSpeciesCellTypeGOCorrRescale(species_1 = 'mmusculus',
-#'  species_2 = 'dmelanogaster',
-#'  go_seurat_obj_sp1 = mmu_go_obj,
-#'  go_seurat_obj_sp2 = dme_go_obj,
-#'  cell_type_col_sp1 = 'cell_type_annotation',
-#'  cell_type_col_sp2 = 'annotation')
-#' }
-#' @importFrom stats cor
-#' @export
-#'
-
-crossSpeciesCellTypeGOCorrRescale <- function(species_1, species_2,
-                                              go_seurat_obj_sp1, go_seurat_obj_sp2,
-                                              cell_type_col_sp1, cell_type_col_sp2,
-                                              norm_log1p_sp1 = TRUE, norm_log1p_sp2 = TRUE,
-                                              corr_method = "pearson") {
-
-  ## take intersection of GO terms
-  message("Take intersection of GO terms then perform scaling of cell type GO activity")
-
-  intersection <- intersect(rownames(go_seurat_obj_sp1), rownames(go_seurat_obj_sp2))
-
-  if(length(intersection) == 0){
-    stop("No intersection of GO terms between species, please check input")
-  }
-
-  go_seurat_obj_sp1_keep = go_seurat_obj_sp1[intersection]
-  go_seurat_obj_sp2_keep = go_seurat_obj_sp2[intersection]
-
-  cell_type_go_sp1 <- getCellTypeGO(go_seurat_obj = go_seurat_obj_sp1_keep,
-                                    cell_type_col = cell_type_col_sp1,
-                                    norm_log1p = norm_log1p_sp1)
-
-  cell_type_go_sp2 <- getCellTypeGO(go_seurat_obj = go_seurat_obj_sp2_keep,
-                                    cell_type_col = cell_type_col_sp2,
-                                    norm_log1p = norm_log1p_sp2)
-
-
-  if (!(all(rownames(cell_type_go_sp1) == rownames(cell_type_go_sp2)))) {
-    stop("cross-species matching of GO terms failed, please check input")
-  }
-
-  all_cell_types_sp1 <- colnames(cell_type_go_sp1)
-  all_cell_types_sp2 <- colnames(cell_type_go_sp2)
-
-  corr_matrix <- data.frame()
-
-  message(paste0("Start calculating ", corr_method, " correlation"))
-
-  for (cell_type_1 in all_cell_types_sp1) {
-    for (cell_type_2 in all_cell_types_sp2) {
-      corr_val <- stats::cor(cell_type_go_sp1[, cell_type_1], cell_type_go_sp2[, cell_type_2], method = corr_method)
-
-      corr_matrix[paste0(species_1, "_", cell_type_1), paste0(species_2, "_", cell_type_2)] <- corr_val
-    }
-  }
-
-  return(corr_matrix)
-}
-
 
 
 #' plot clustered heatmap for cell type corr
@@ -465,7 +399,7 @@ crossSpeciesCellTypeGOCorrRescale <- function(species_1, species_2,
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
 #'
 #' go_seurat_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
@@ -520,7 +454,7 @@ plotCellTypeCorrHeatmap <- function(corr_matrix, scale = NA, ...) {
     lower_bound = round_down_5(min(corr_matrix + 0.5))
     upper_bound = round_up_5(max(corr_matrix + 0.5))
 
-    breaks = seq(lower_bound, upper_bound, by = 0.1)
+    breaks = seq(lower_bound, upper_bound, by = 0.05)
 
     # slanter only takes positive matrix values so we have a work around
     heatmap <- slanter::sheatmap(corr_matrix + 0.5 , legend_breaks = breaks, legend_labels = round(breaks - 0.5, digits = 2), ...)
@@ -542,7 +476,7 @@ plotCellTypeCorrHeatmap <- function(corr_matrix, scale = NA, ...) {
 #' @param analyzed_go_seurat_sp2 analyzed GO seurat object of species two
 #' @param cell_type_col_sp1 cell type column name for species 1 data
 #' @param cell_type_col_sp2 cell type column name for species 2 data
-#' @param slot_use slot to use for marker computation, default 'data' which after NormalizeData will be log1p normalized data.
+#' @param layer_use layer to use for marker computation, default 'data' which after NormalizeData will be log1p normalized data.
 #' @param p_val_threshould p value threshold for selecting DEG (p_adjust)
 #' @return a list with sp1 raw, sp2 raw and shared, significant up and down regulated GO terms per cell type (pair)
 #' @examples
@@ -550,9 +484,9 @@ plotCellTypeCorrHeatmap <- function(corr_matrix, scale = NA, ...) {
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
-#' dme_tbl = ensemblToGo(species = 'dmelanogaster')
+#' data(dme_tbl)
 #' data(dme_subset)
 #'
 #' mmu_go_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
@@ -572,7 +506,7 @@ plotCellTypeCorrHeatmap <- function(corr_matrix, scale = NA, ...) {
 #' analyzed_go_seurat_sp2 =  dme_go_obj_analyzed,
 #' cell_type_col_sp1 = 'cell_type_annotation',
 #' cell_type_col_sp2 = 'annotation',
-#' slot_use = "data",
+#' layer_use = "data",
 #' p_val_threshould = 0.01)
 #' }
 #' @importFrom Seurat FindAllMarkers Idents
@@ -582,7 +516,7 @@ plotCellTypeCorrHeatmap <- function(corr_matrix, scale = NA, ...) {
 #'
 
 
-getCellTypeSharedGO <- function(species_1, species_2, analyzed_go_seurat_sp1, analyzed_go_seurat_sp2, cell_type_col_sp1, cell_type_col_sp2, slot_use = "data", p_val_threshould = 0.01) {
+getCellTypeSharedGO <- function(species_1, species_2, analyzed_go_seurat_sp1, analyzed_go_seurat_sp2, cell_type_col_sp1, cell_type_col_sp2, layer_use = "data", p_val_threshould = 0.01) {
   if (!(cell_type_col_sp1 %in% colnames(analyzed_go_seurat_sp1@meta.data))) {
     stop("cell_type_col_sp1 not in annotation, please check input")
   }
@@ -597,10 +531,10 @@ getCellTypeSharedGO <- function(species_1, species_2, analyzed_go_seurat_sp1, an
 
 
   message(paste0("calculate cell type marker for species ", species_1, ", this will take a while"))
-  sp1_markers <- FindAllMarkers(object = analyzed_go_seurat_sp1, slot = slot_use, test.use = "wilcox", verbose = TRUE, )
+  sp1_markers <- FindAllMarkers(object = analyzed_go_seurat_sp1, layer = layer_use, test.use = "wilcox", verbose = TRUE, )
 
   message(paste0("calculate cell type marker for species ", species_2, ", this will take a while"))
-  sp2_markers <- FindAllMarkers(object = analyzed_go_seurat_sp2, slot = slot_use, test.use = "wilcox", verbose = TRUE)
+  sp2_markers <- FindAllMarkers(object = analyzed_go_seurat_sp2, layer = layer_use, test.use = "wilcox", verbose = TRUE)
 
 
   sp1_cts <- levels(factor(analyzed_go_seurat_sp1@meta.data[[cell_type_col_sp1]]))
@@ -697,7 +631,7 @@ getCellTypeSharedGO <- function(species_1, species_2, analyzed_go_seurat_sp1, an
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
 #' go_seurat_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
 #'  seurat_obj = mmu_subset,
@@ -760,9 +694,9 @@ plotCellTypeSankey <- function(corr_matrix, corr_threshould = 0.1, ...) {
 #' library(scGOclust)
 #' library(httr)
 #' httr::set_config(httr::config(ssl_verifypeer = FALSE))
-#' mmu_tbl = ensemblToGo(species = 'mmusculus')
+#' data(mmu_tbl)
 #' data(mmu_subset)
-#' dme_tbl = ensemblToGo(species = 'dmelanogaster')
+#' data(dme_tbl)
 #' data(dme_subset)
 #'
 #' mmu_go_obj = makeGOSeurat(ensembl_to_GO = mmu_tbl,
@@ -782,7 +716,7 @@ plotCellTypeSankey <- function(corr_matrix, corr_threshould = 0.1, ...) {
 #' analyzed_go_seurat_sp2 = dme_go_obj_analyzed,
 #' cell_type_col_sp1 = 'cell_type_annotation',
 #' cell_type_col_sp2 = 'annotation',
-#' slot_use = "data",
+#' layer_use = "data",
 #' p_val_threshould = 0.01)
 #'
 #'
@@ -827,7 +761,8 @@ getCellTypeSharedTerms <- function(shared_go, cell_type_sp1, cell_type_sp2, retu
 
     if(arrange_avg_log2FC){
       message("return shared terms arranged in decreasing mean avg_log2FC between species")
-      tbl_ct <- tbl_ct %>% mutate(mean_avg_log2FC = ((avg_log2FC_sp1 + avg_log2FC_sp2) / 2)) %>%
+      tbl_ct <- tbl_ct %>% filter(avg_log2FC_sp1 > 0) %>% filter(avg_log2FC_sp2 > 0) %>%
+        mutate(mean_avg_log2FC = ((avg_log2FC_sp1 + avg_log2FC_sp2) / 2)) %>%
         arrange(desc(mean_avg_log2FC))
 
     }
@@ -842,7 +777,8 @@ getCellTypeSharedTerms <- function(shared_go, cell_type_sp1, cell_type_sp2, retu
 
     if(arrange_avg_log2FC){
       message("return shared terms arranged in decreasing mean avg_log2FC between species")
-      tbl_ct <- tbl_ct %>% mutate(mean_avg_log2FC = ((avg_log2FC_sp1 + avg_log2FC_sp2) / 2)) %>%
+      tbl_ct <- tbl_ct %>% filter(avg_log2FC_sp1 > 0) %>% filter(avg_log2FC_sp2 > 0) %>%
+        mutate(mean_avg_log2FC = ((avg_log2FC_sp1 + avg_log2FC_sp2) / 2)) %>%
         arrange(desc(mean_avg_log2FC))
 
     }
