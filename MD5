@@ -1,9 +1,9 @@
-72b41592c066c479be19c6f80678cace *DESCRIPTION
+a5676fe54e2665e50b56d4edd53937ed *DESCRIPTION
 55c7b7174a58cb47a47a109bd043ae0c *NAMESPACE
 5146050a46d80b0b1daa61b2897ab35c *R/data.R
-28cf041234d2bf33dc76a36abfc52626 *R/function.R
+b32cde69c33526062fc587b49b623f2f *R/function.R
 c1e3b4bdb28705c56c581f84ce769126 *R/global.R
-1b67a70c4c2e09895086fb616b22916d *README.md
+6eb28d3b77a0b22cfa74be173333613e *README.md
 d8990b6b8e36f73b25600b81d0a07487 *build/vignette.rds
 b62ebd76106970f26950d9e72da5c636 *data/dme_subset.rda
 7b4a44f045843fc9ac020dda8e353e6d *data/dme_tbl.rda
@@ -11,7 +11,7 @@ b62ebd76106970f26950d9e72da5c636 *data/dme_subset.rda
 7be0d1aa1cad00d8929a76e7211f6733 *data/mmu_tbl.rda
 69b20c6921fd49f4a60d7dc395aeb9b2 *inst/doc/scGOclust_vignette.R
 f59c79f8520e081e2d35cc0943a0577a *inst/doc/scGOclust_vignette.Rmd
-602d2a3220b67bcaff214996f8fc4ef5 *inst/doc/scGOclust_vignette.html
+6ea7c07902368d93f4fe800c267d78ce *inst/doc/scGOclust_vignette.html
 3f50e12e3437faf47d316fc344c1172d *man/analyzeGOSeurat.Rd
 3e723467bbf26bc8fbd15b964dc920cd *man/cellTypeGOCorr.Rd
 10ca3b6ad860ff1f316fd1c0144f1206 *man/crossSpeciesCellTypeGOCorr.Rd
